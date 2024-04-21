@@ -1,5 +1,5 @@
 import { commands } from "./commands";
-import { changeDirectory, listDirectory } from "./data";
+import { changeDirectory, listDirectory, makeDirectory } from "./data";
 
 export const handleLastCommand = (
   command: string,
@@ -23,6 +23,11 @@ export const handleLastCommand = (
       currentDir,
       setCurrentDir
     );
+    return errorMessage instanceof Error
+      ? "error: " + errorMessage.message
+      : "";
+  } else if (commandName === "mkdir") {
+    const errorMessage = makeDirectory(command.split(" ")[1], currentDir);
     return errorMessage instanceof Error
       ? "error: " + errorMessage.message
       : "";

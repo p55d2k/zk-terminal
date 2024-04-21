@@ -92,12 +92,7 @@ export const changeDirectory = (
   currentDir: string,
   setCurrentDir: (dir: string) => void
 ): Error | "sucess" => {
-  if (
-    !newDir ||
-    newDir === "/" ||
-    newDir === "~" ||
-    newDir === ""
-  ) {
+  if (!newDir || newDir === "/" || newDir === "~" || newDir === "") {
     setCurrentDir("/");
     return "sucess";
   }
@@ -125,5 +120,51 @@ export const changeDirectory = (
   }
 
   setCurrentDir(foundDir.fullPath);
+  return "sucess";
+};
+
+export const makeDirectory = (
+  newDirName: string,
+  currentDir: string
+): Error | "sucess" => {
+  if (!newDirName) {
+    return new Error("missing directory name");
+  }
+
+  const dirData = getContentFromDirectoryName(currentDir);
+
+  if (dirData instanceof Error) {
+    return dirData;
+  }
+
+  const foundDir = dirData.find((content) => content.name === newDirName);
+
+  if (foundDir) {
+    return new Error(`directory already exists: ${newDirName}`);
+  }
+
+  dirData.push({
+    name: newDirName,
+    type: "directory",
+    fullPath: `${currentDir.slice(1)}/${newDirName}`,
+    content: [],
+  });
+
+  const data = handleData();
+
+  const dirs = currentDir.split("/").filter((dir) => dir !== "");
+  let currentDirData = data;
+
+  for (const dir of dirs) {
+    const foundDir = currentDirData.content.find(
+      (content) => content.name === dir
+    ) as Directory;
+
+    currentDirData = foundDir;
+  }
+
+  currentDirData.content = dirData;
+
+  localStorage.setItem("data", JSON.stringify(currentDirData));
   return "sucess";
 };
