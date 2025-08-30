@@ -1,0 +1,15 @@
+export const commands = [
+  "ls",
+  "cd",
+  "pwd",
+  "cat",
+  "echo",
+  "touch",
+  "mkdir",
+  "rm",
+  "mv",
+  "cp",
+  "clear",
+  "help",
+  "reset",
+];

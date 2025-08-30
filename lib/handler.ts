@@ -1,39 +1,69 @@
-import { commands } from "./commands";
-import { changeDirectory, listDirectory, makeDirectory } from "./data";
+import { executeCommand } from "./parser";
+import { CommandContext } from "./types";
 
 export const handleLastCommand = (
   command: string,
   currentDir: string,
   setCurrentDir: (dir: string) => void
 ): string => {
-  const commandName = command.split(" ")[0];
-  if (!commands.includes(commandName)) {
-    return `error: command not found: ${command}`;
+  const commandChains = command
+    .split(";")
+    .map((c) => c.trim())
+    .filter((c) => c);
+
+  let output = "";
+
+  for (const chain of commandChains) {
+    if (chain.includes("&&")) {
+      const subCommands = chain
+        .split("&&")
+        .map((c) => c.trim())
+        .filter((c) => c);
+      let chainSuccess = true;
+
+      for (const subCmd of subCommands) {
+        if (chainSuccess) {
+          const context: CommandContext = {
+            currentDir,
+            setCurrentDir,
+            input: undefined,
+          };
+          const result = executeCommand(subCmd, context);
+          if (output && result) output += "\n";
+          output += result;
+          chainSuccess = !result.startsWith("error:");
+        }
+      }
+    } else if (chain.includes("|")) {
+      const subCommands = chain
+        .split("|")
+        .map((c) => c.trim())
+        .filter((c) => c);
+      let input = "";
+
+      for (const subCmd of subCommands) {
+        const context: CommandContext = {
+          currentDir,
+          setCurrentDir,
+          input,
+        };
+        const result = executeCommand(subCmd, context);
+        if (output && result) output += "\n";
+        output += result;
+        input = result;
+      }
+    } else {
+      // Single command
+      const context: CommandContext = {
+        currentDir,
+        setCurrentDir,
+        input: undefined,
+      };
+      const result = executeCommand(chain, context);
+      if (output && result) output += "\n";
+      output += result;
+    }
   }
 
-  if (commandName === "pwd") {
-    return currentDir;
-  } else if (commandName === "echo") {
-    return command.slice(5);
-  } else if (commandName === "ls") {
-    return listDirectory(currentDir);
-  } else if (commandName === "cd") {
-    const errorMessage = changeDirectory(
-      command.split(" ")[1],
-      currentDir,
-      setCurrentDir
-    );
-    return errorMessage instanceof Error
-      ? "error: " + errorMessage.message
-      : "";
-  } else if (commandName === "mkdir") {
-    const errorMessage = makeDirectory(command.split(" ")[1], currentDir);
-    return errorMessage instanceof Error
-      ? "error: " + errorMessage.message
-      : "";
-  } else if (commandName === "clear") {
-    return "";
-  } else {
-    return `error: command not implemented yet: ${commandName}`;
-  }
+  return output;
 };

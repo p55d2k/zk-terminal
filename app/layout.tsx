@@ -8,8 +8,8 @@ const mono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Terminal",
-  description: "Terminal",
+  title: "ZKTerminal",
+  description: "ZKTerminal",
 };
 
 export default function RootLayout({
