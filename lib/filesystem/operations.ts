@@ -1,4 +1,4 @@
-import { Directory, File, FileSystemItem } from "../types";
+import { Directory, File, Symlink, FileSystemItem } from "../types";
 import { loadData, saveData } from "./storage";
 import { getDirectoryFromPath, getContentFromPath } from "./navigation";
 import { pathJoin, normalizePath, resolvePath } from "../utils";
@@ -24,6 +24,9 @@ const updateDirectoryContent = (
 
 const updateFullPaths = (item: FileSystemItem, newBasePath: string) => {
   item.fullPath = newBasePath;
+  // Preserve existing dates
+  if (!item.modified) item.modified = new Date();
+  if (!item.created) item.created = new Date();
   if (item.type === "directory") {
     item.content.forEach((child) => {
       const childPath = pathJoin(newBasePath, child.name);
@@ -52,11 +55,24 @@ export const makeDirectory = (
     return new Error(`directory already exists: ${newDirName}`);
   }
 
+  let fullPath: string;
+  try {
+    fullPath = normalizePath(pathJoin(currentDir, newDirName));
+  } catch (error) {
+    return new Error("Invalid directory name");
+  }
+
   const newDir: Directory = {
     name: newDirName,
     type: "directory",
-    fullPath: normalizePath(pathJoin(currentDir, newDirName)),
+    fullPath,
     content: [],
+    permissions: "drwxr-xr-x",
+    owner: "user",
+    group: "users",
+    size: 4096,
+    modified: new Date(),
+    created: new Date(),
   };
 
   dirData.push(newDir);
@@ -84,11 +100,24 @@ export const createFile = (
     return new Error(`file already exists: ${fileName}`);
   }
 
+  let fullPath: string;
+  try {
+    fullPath = normalizePath(pathJoin(currentDir, fileName));
+  } catch (error) {
+    return new Error("Invalid file name");
+  }
+
   const newFile: File = {
     name: fileName,
     type: "file",
-    fullPath: normalizePath(pathJoin(currentDir, fileName)),
+    fullPath,
     content: "",
+    permissions: "-rw-r--r--",
+    owner: "user",
+    group: "users",
+    size: 0,
+    modified: new Date(),
+    created: new Date(),
   };
 
   dirData.push(newFile);
@@ -119,10 +148,42 @@ export const readFile = (filePath: string): string | Error => {
   return (file as File).content;
 };
 
+const validateFileContent = (content: string): boolean => {
+  // Basic content validation to prevent malicious uploads
+  const maxSize = 10 * 1024 * 1024; // 10MB limit
+  if (content.length > maxSize) {
+    return false;
+  }
+
+  // Check for potentially dangerous patterns
+  const dangerousPatterns = [
+    /<script[^>]*>.*?<\/script>/gi,
+    /javascript:/gi,
+    /data:text\/html/gi,
+    /vbscript:/gi,
+    /onload\s*=/gi,
+    /onerror\s*=/gi,
+  ];
+
+  for (const pattern of dangerousPatterns) {
+    if (pattern.test(content)) {
+      return false;
+    }
+  }
+
+  return true;
+};
+
 export const writeFile = (
   filePath: string,
   content: string
 ): Error | "success" => {
+  if (!validateFileContent(content)) {
+    return new Error(
+      "Invalid file content: potentially malicious or too large"
+    );
+  }
+
   const data = loadData();
   const dirs = filePath.split("/").filter((dir) => dir !== "");
   let current = data;
@@ -143,12 +204,26 @@ export const writeFile = (
 
   if (file) {
     (file as File).content = content;
+    (file as File).size = content.length;
+    (file as File).modified = new Date();
   } else {
+    let fullPath: string;
+    try {
+      fullPath = normalizePath(filePath);
+    } catch (error) {
+      return new Error("Invalid file path");
+    }
     current.content.push({
       name: fileName,
       type: "file",
-      fullPath: normalizePath(filePath),
+      fullPath,
       content: content,
+      permissions: "-rw-r--r--",
+      owner: "user",
+      group: "users",
+      size: content.length,
+      modified: new Date(),
+      created: new Date(),
     });
   }
 
@@ -254,8 +329,11 @@ export const moveFile = (
     // Overwrite
     if (srcItem.type === "file") {
       (existing as File).content = (srcItem as File).content;
+      (existing as File).size = (srcItem as File).size;
+      existing.modified = new Date();
     } else {
       (existing as Directory).content = (srcItem as Directory).content;
+      existing.modified = new Date();
       // Update fullPaths for the moved content
       (existing as Directory).content.forEach((child) => {
         updateFullPaths(child, pathJoin(existing.fullPath, child.name));
@@ -264,11 +342,17 @@ export const moveFile = (
   } else {
     // Move to new name
     srcItem.name = destName;
-    srcItem.fullPath = normalizePath(
-      destPath.startsWith("/")
-        ? destPath
-        : pathJoin(destCurrent.fullPath, destName)
-    );
+    let fullPath: string;
+    try {
+      fullPath = normalizePath(
+        destPath.startsWith("/")
+          ? destPath
+          : pathJoin(destCurrent.fullPath, destName)
+      );
+    } catch (error) {
+      return new Error("Invalid destination path");
+    }
+    srcItem.fullPath = fullPath;
     // Update fullPaths for the moved item
     updateFullPaths(srcItem, srcItem.fullPath);
     destCurrent.content.push(srcItem);
@@ -322,17 +406,194 @@ export const copyFile = (
   }
 
   const copy = JSON.parse(JSON.stringify(srcItem));
-  copy.name = destName;
-  copy.fullPath = normalizePath(
-    destPath.startsWith("/")
-      ? destPath
-      : pathJoin(destCurrent.fullPath, destName)
-  );
+  // Restore Date objects after JSON parsing
+  const restoreDates = (item: any): any => {
+    if (item && typeof item === "object") {
+      if (typeof item.modified === "string") {
+        item.modified = new Date(item.modified);
+      }
+      if (typeof item.created === "string") {
+        item.created = new Date(item.created);
+      }
+      if (Array.isArray(item.content)) {
+        item.content = item.content.map(restoreDates);
+      }
+    }
+    return item;
+  };
+  const restoredCopy = restoreDates(copy);
+  restoredCopy.name = destName;
+  let fullPath: string;
+  try {
+    fullPath = normalizePath(
+      destPath.startsWith("/")
+        ? destPath
+        : pathJoin(destCurrent.fullPath, destName)
+    );
+  } catch (error) {
+    return new Error("Invalid destination path");
+  }
+  restoredCopy.fullPath = fullPath;
 
   // Update fullPaths recursively for the copied item
-  updateFullPaths(copy, copy.fullPath);
+  updateFullPaths(restoredCopy, restoredCopy.fullPath);
 
-  destCurrent.content.push(copy);
+  destCurrent.content.push(restoredCopy);
   saveData(data);
   return "success";
+};
+
+export const changePermissions = (
+  path: string,
+  permissions: string
+): Error | "success" => {
+  const data = loadData();
+  const dirs = path.split("/").filter((dir) => dir !== "");
+  let current = data;
+
+  for (let i = 0; i < dirs.length - 1; i++) {
+    const dir = dirs[i];
+    const found = current.content.find(
+      (c) => c.name === dir && c.type === "directory"
+    );
+    if (!found) return new Error(`path not found: ${path}`);
+    current = found as Directory;
+  }
+
+  const name = dirs[dirs.length - 1];
+  const item = current.content.find((c) => c.name === name);
+
+  if (!item) return new Error(`item not found: ${path}`);
+
+  item.permissions = permissions;
+  item.modified = new Date();
+  saveData(data);
+  return "success";
+};
+
+export const createSymlink = (
+  linkPath: string,
+  targetPath: string
+): Error | "success" => {
+  const data = loadData();
+  const linkDirs = linkPath.split("/").filter((dir) => dir !== "");
+  let current = data;
+
+  for (let i = 0; i < linkDirs.length - 1; i++) {
+    const dir = linkDirs[i];
+    const found = current.content.find(
+      (c) => c.name === dir && c.type === "directory"
+    );
+    if (!found) return new Error(`path not found: ${linkPath}`);
+    current = found as Directory;
+  }
+
+  const linkName = linkDirs[linkDirs.length - 1];
+  const existing = current.content.find((c) => c.name === linkName);
+
+  if (existing) {
+    return new Error(`file already exists: ${linkName}`);
+  }
+
+  let fullPath: string;
+  try {
+    fullPath = normalizePath(linkPath);
+  } catch (error) {
+    return new Error("Invalid link path");
+  }
+
+  const symlink: Symlink = {
+    name: linkName,
+    type: "symlink",
+    fullPath,
+    target: targetPath,
+    permissions: "lrwxrwxrwx",
+    owner: "user",
+    group: "users",
+    size: targetPath.length,
+    modified: new Date(),
+    created: new Date(),
+  };
+
+  current.content.push(symlink);
+  saveData(data);
+  return "success";
+};
+
+export const findFiles = (
+  startPath: string,
+  pattern: string,
+  type?: "file" | "directory" | "symlink"
+): FileSystemItem[] => {
+  const results: FileSystemItem[] = [];
+  const data = loadData();
+  const dirs = startPath.split("/").filter((dir) => dir !== "");
+  let current = data;
+
+  for (const dir of dirs) {
+    const found = current.content.find(
+      (c) => c.name === dir && c.type === "directory"
+    );
+    if (!found) return results;
+    current = found as Directory;
+  }
+
+  const searchDirectory = (dir: Directory): void => {
+    for (const item of dir.content) {
+      if (!type || item.type === type) {
+        if (item.name.includes(pattern) || pattern === "*") {
+          results.push(item);
+        }
+      }
+      if (item.type === "directory") {
+        searchDirectory(item);
+      }
+    }
+  };
+
+  searchDirectory(current);
+  return results;
+};
+
+export const grepSearch = (
+  startPath: string,
+  pattern: string,
+  caseSensitive: boolean = false
+): { file: string; line: number; content: string }[] => {
+  const results: { file: string; line: number; content: string }[] = [];
+  const data = loadData();
+  const dirs = startPath.split("/").filter((dir) => dir !== "");
+  let current = data;
+
+  for (const dir of dirs) {
+    const found = current.content.find(
+      (c) => c.name === dir && c.type === "directory"
+    );
+    if (!found) return results;
+    current = found as Directory;
+  }
+
+  const searchDirectory = (dir: Directory): void => {
+    for (const item of dir.content) {
+      if (item.type === "file") {
+        const lines = (item as File).content.split("\n");
+        lines.forEach((line, index) => {
+          const searchLine = caseSensitive ? line : line.toLowerCase();
+          const searchPattern = caseSensitive ? pattern : pattern.toLowerCase();
+          if (searchLine.includes(searchPattern)) {
+            results.push({
+              file: item.fullPath,
+              line: index + 1,
+              content: line,
+            });
+          }
+        });
+      } else if (item.type === "directory") {
+        searchDirectory(item);
+      }
+    }
+  };
+
+  searchDirectory(current);
+  return results;
 };

@@ -12,4 +12,13 @@ export const commands = [
   "clear",
   "help",
   "reset",
+  "chmod",
+  "ln",
+  "find",
+  "grep",
+  "gzip",
+  "gunzip",
+  "tar",
+  "nano",
+  "vim",
 ];

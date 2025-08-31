@@ -1,40 +1,162 @@
 "use client";
 
 import { handleLastCommand } from "@/lib/handler";
-import { getContentFromPath } from "@/lib/filesystem";
-import { commands } from "@/lib/commands/index";
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback, useMemo, memo } from "react";
+import CommandHistory from "./components/CommandHistory";
+import TerminalHeader from "./components/TerminalHeader";
+import SearchInterface from "./components/SearchInterface";
+import TerminalInput, { TerminalInputRef } from "./components/TerminalInput";
+import TextEditor from "./components/TextEditor";
+import { useCommandHistory } from "./hooks/useCommandHistory";
+import { useSearch } from "./hooks/useSearch";
+import { useTabCompletion } from "./hooks/useTabCompletion";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
 
 interface CommandHistory {
   dir: string;
   command: string;
 }
 
-const Home = () => {
+const Home = memo(() => {
   const [currentDir, setCurrentDir] = useState<string>("/");
   const [cleared, setCleared] = useState<boolean>(false);
-  const [history, setHistory] = useState<CommandHistory[]>([]);
-  const [outputHistory, setOutputHistory] = useState<string[]>([]);
   const [currentCommand, setCurrentCommand] = useState<string>("");
-  const [historyIndex, setHistoryIndex] = useState<number>(-1);
-  const [isMobile, setIsMobile] = useState<boolean>(false);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const historyRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(
-        window.innerWidth < 768 ||
-          /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
-            navigator.userAgent
-          )
-      );
-    };
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
+  // Editor state
+  const [editorMode, setEditorMode] = useState<{
+    isOpen: boolean;
+    filePath: string;
+    editorType: "nano" | "vim";
+    commandIndex?: number; // Track which command in history opened the editor
+  } | null>(null);
+
+  const inputRef = useRef<TerminalInputRef>(null);
+  const historyRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const inputElementRef = useRef<HTMLInputElement | null>(null);
+
+  // Custom hooks
+  const {
+    history,
+    outputHistory,
+    addCommand,
+    navigateHistory,
+    clearHistory,
+    updateCommandOutput,
+  } = useCommandHistory();
+  const {
+    searchMode,
+    searchQuery,
+    searchResults,
+    searchIndex,
+    startSearch,
+    exitSearch,
+    navigateSearch,
+    selectSearchResult,
+    updateSearchQuery,
+  } = useSearch(history);
+  const {
+    showSuggestions,
+    suggestions,
+    handleTabCompletion,
+    resetTabCompletion,
+  } = useTabCompletion(currentDir);
+
+  // Memoized callbacks
+  const getOutputClass = useCallback((output: string) => {
+    if (!output) return "text-white";
+    if (output.startsWith("error")) return "text-red-500";
+    if (output.trim() === "") return "text-green-500";
+    return "text-white";
   }, []);
 
+  const getOutputIcon = useCallback((output: string) => {
+    if (!output) return "";
+    if (output.startsWith("error")) return "✗ ";
+    if (output.trim() === "") return "✓ ";
+    return "";
+  }, []);
+
+  const clearScreen = useCallback(() => {
+    setCleared(true);
+    clearHistory();
+  }, [clearHistory]);
+
+  const handleEditorClose = useCallback(() => {
+    setEditorMode(null);
+  }, []);
+
+  const handleEditorSave = useCallback(
+    (content: string) => {
+      // Update the output of the existing command that opened the editor
+      if (editorMode?.commandIndex !== undefined) {
+        const message = `File saved: ${editorMode.filePath}`;
+        updateCommandOutput(editorMode.commandIndex, message);
+      }
+      setEditorMode(null);
+    },
+    [editorMode, updateCommandOutput]
+  );
+
+  const handleCommandEntered = useCallback(() => {
+    if (!currentCommand.trim()) return;
+    const output = handleLastCommand(currentCommand, currentDir, setCurrentDir);
+
+    // Check if output indicates editor should open
+    if (output.startsWith("__OPEN_EDITOR__:")) {
+      const [, filePath, editorType] = output.split(":");
+      // Add the command to history before opening editor and get its index
+      addCommand(currentDir, currentCommand, "");
+      const commandIndex = history.length; // This will be the index of the command we just added
+      setEditorMode({
+        isOpen: true,
+        filePath,
+        editorType: editorType as "nano" | "vim",
+        commandIndex,
+      });
+      setCurrentCommand("");
+      return;
+    }
+
+    addCommand(currentDir, currentCommand, output);
+    setCurrentCommand("");
+    if (currentCommand === "clear") {
+      clearScreen();
+    }
+  }, [currentCommand, currentDir, addCommand, clearScreen, history.length]);
+
+  // Keyboard shortcuts hook
+  const { handleKeyDown } = useKeyboardShortcuts({
+    onClearScreen: clearScreen,
+    onStartSearch: startSearch,
+    onExitSearch: exitSearch,
+    onNavigateHistory: navigateHistory,
+    onNavigateSearch: navigateSearch,
+    onSelectSearchResult: selectSearchResult,
+    onHandleTabCompletion: handleTabCompletion,
+    onResetTabCompletion: resetTabCompletion,
+    onUpdateSearchQuery: updateSearchQuery,
+    searchMode,
+    searchIndex,
+    searchResults,
+    searchQuery,
+    historyIndex: 0, // This will be managed by useCommandHistory
+    currentCommand,
+    setCurrentCommand,
+  });
+
+  // Mobile detection
+  const isMobile = useMemo(() => {
+    if (typeof window === "undefined") return false;
+    return (
+      window.innerWidth < 768 ||
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(
+        navigator.userAgent
+      )
+    );
+  }, []);
+
+  // Effects
   useEffect(() => {
     if (!isMobile && inputRef.current) {
       inputRef.current.focus();
@@ -47,111 +169,102 @@ const Home = () => {
     }
   }, [history]);
 
-  const handleCommandEntered = () => {
-    if (!currentCommand.trim()) return;
-    const newHistory = [
-      ...history,
-      { dir: currentDir, command: currentCommand },
-    ];
-    setHistory(newHistory);
+  // Focus locking effect - keep focus on terminal input when not in editor mode
+  useEffect(() => {
+    if (isMobile || editorMode?.isOpen || searchMode) return;
 
-    const output = handleLastCommand(currentCommand, currentDir, setCurrentDir);
-    setOutputHistory([...outputHistory, output]);
-    setCurrentCommand("");
-    setHistoryIndex(-1);
-
-    if (currentCommand === "clear") {
-      clearScreen();
-    }
-  };
-
-  const clearScreen = () => {
-    setCleared(true);
-    setHistory([]);
-    setOutputHistory([]);
-  };
-
-  const getCompletions = (input: string): string[] => {
-    const parts = input.split(" ");
-    if (parts.length === 1) {
-      // Complete command
-      return commands.filter((cmd) => cmd.startsWith(input));
-    } else {
-      // Complete file/path
-      const dirContent = getContentFromPath(currentDir);
-      if (dirContent instanceof Error) return [];
-      return dirContent
-        .map((item: any) => item.name)
-        .filter((name: string) => name.startsWith(parts[parts.length - 1]));
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") {
-      handleCommandEntered();
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      if (historyIndex < history.length - 1) {
-        const newIndex = historyIndex + 1;
-        setHistoryIndex(newIndex);
-        setCurrentCommand(history[history.length - 1 - newIndex].command);
+    const focusInput = () => {
+      if (inputRef.current) {
+        inputRef.current.focus();
       }
-    } else if (e.key === "ArrowDown") {
-      e.preventDefault();
-      if (historyIndex > 0) {
-        const newIndex = historyIndex - 1;
-        setHistoryIndex(newIndex);
-        setCurrentCommand(history[history.length - 1 - newIndex].command);
-      } else if (historyIndex === 0) {
-        setHistoryIndex(-1);
-        setCurrentCommand("");
+    };
+
+    const handleClick = (e: MouseEvent) => {
+      // Only prevent focus loss if clicking within the terminal container
+      if (
+        containerRef.current &&
+        containerRef.current.contains(e.target as Node)
+      ) {
+        // Allow focus on the input, but refocus if focus is lost
+        setTimeout(focusInput, 0);
       }
-    } else if (e.key === "Tab") {
-      e.preventDefault();
-      const completions = getCompletions(currentCommand);
-      if (completions.length === 1) {
-        const parts = currentCommand.split(" ");
-        if (parts.length === 1) {
-          setCurrentCommand(completions[0]);
-        } else {
-          parts[parts.length - 1] = completions[0];
-          setCurrentCommand(parts.join(" "));
+    };
+
+    const handleFocus = (e: FocusEvent) => {
+      // If focus is lost to something outside the terminal, refocus the input
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(e.target as Node)
+      ) {
+        setTimeout(focusInput, 0);
+      }
+    };
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      // If any key is pressed and we're not in the input, focus it
+      if (document.activeElement !== inputElementRef.current) {
+        focusInput();
+      }
+    };
+
+    const handleContextMenu = (e: MouseEvent) => {
+      // Prevent context menu to avoid focus loss
+      if (
+        containerRef.current &&
+        containerRef.current.contains(e.target as Node)
+      ) {
+        e.preventDefault();
+      }
+    };
+
+    // Add event listeners
+    document.addEventListener("click", handleClick);
+    document.addEventListener("focusin", handleFocus);
+    document.addEventListener("keydown", handleKeyDown);
+    document.addEventListener("contextmenu", handleContextMenu);
+
+    // Initial focus
+    focusInput();
+
+    // Cleanup
+    return () => {
+      document.removeEventListener("click", handleClick);
+      document.removeEventListener("focusin", handleFocus);
+      document.removeEventListener("keydown", handleKeyDown);
+      document.removeEventListener("contextmenu", handleContextMenu);
+    };
+  }, [isMobile, editorMode?.isOpen, searchMode]);
+
+  // Handle Enter key
+  const handleInputKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") {
+        handleCommandEntered();
+      } else {
+        handleKeyDown(e);
+      }
+    },
+    [handleCommandEntered, handleKeyDown]
+  );
+
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setCurrentCommand(value);
+      resetTabCompletion();
+    },
+    [resetTabCompletion]
+  );
+
+  const handleInputBlur = useCallback(() => {
+    // Refocus the input if it loses focus and we're not in editor/search mode
+    if (!editorMode?.isOpen && !searchMode && !isMobile) {
+      setTimeout(() => {
+        if (inputRef.current) {
+          inputRef.current.focus();
         }
-      } else if (completions.length > 1) {
-        // Find common prefix
-        const prefix = completions.reduce((p, c) => {
-          let i = 0;
-          while (i < p.length && i < c.length && p[i] === c[i]) i++;
-          return p.slice(0, i);
-        });
-        if (
-          prefix.length >
-          currentCommand.split(" ")[currentCommand.split(" ").length - 1].length
-        ) {
-          const parts = currentCommand.split(" ");
-          parts[parts.length - 1] = prefix;
-          setCurrentCommand(parts.join(" "));
-        }
-      }
-    } else if (e.ctrlKey && e.key === "c") {
-      setCurrentCommand("");
-    } else if (e.ctrlKey && e.key === "l") {
-      e.preventDefault();
-      clearScreen();
+      }, 0);
     }
-  };
-
-  const getOutputClass = (output: string) => {
-    if (output.startsWith("error")) return "text-red-500";
-    if (output.trim() === "") return "text-green-500";
-    return "text-white";
-  };
-
-  const getOutputIcon = (output: string) => {
-    if (output.startsWith("error")) return "✗ ";
-    if (output.trim() === "") return "✓ ";
-    return "";
-  };
+  }, [editorMode?.isOpen, searchMode, isMobile]);
 
   if (isMobile) {
     return (
@@ -167,60 +280,61 @@ const Home = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen bg-black text-white font-mono text-base sm:text-lg p-4 sm:p-6">
-      {!cleared && (
-        <div className="mb-2">
-          <p className="text-green-400">zk-terminal v1.0</p>
-          <p className="text-gray-400 text-sm sm:text-base">
-            Type &apos;help&apos; for commands. ↑/↓ history, Tab completion, Ctrl+C clear
-            input, Ctrl+L clear screen.
-          </p>
-        </div>
-      )}
+    <div
+      ref={containerRef}
+      className="flex flex-col h-screen bg-black text-white font-mono text-base sm:text-lg p-4 sm:p-6"
+    >
+      <TerminalHeader cleared={cleared} />
       <div className="flex flex-col flex-1 overflow-y-auto" ref={historyRef}>
-        {history.map((command, index) => (
-          <div className="flex flex-col w-full mb-1" key={index}>
-            <div className="flex flex-row space-x-2">
-              <p className="flex flex-row space-x-2 text-green-400 flex-shrink-0">
-                <span className="hidden sm:inline">zk-terminal</span>
-                <span className="sm:hidden">zk</span>
-                <span>{command.dir}</span>
-                <span>$</span>
-              </p>
-              <p className="w-full text-white break-all ml-4">
-                {command.command}
-              </p>
-            </div>
-            <pre
-              className={`whitespace-pre-wrap pl-4 sm:pl-0 ${getOutputClass(
-                outputHistory[index]
-              )} break-all`}
-            >
-              {outputHistory[index]}
-            </pre>
-          </div>
-        ))}
+        <div data-testid="terminal-output">
+          <CommandHistory
+            history={history}
+            outputHistory={outputHistory}
+            getOutputClass={getOutputClass}
+            getOutputIcon={getOutputIcon}
+          />
+        </div>
         <div className="flex flex-row space-x-2 w-full">
           <p className="flex flex-row space-x-2 text-green-400 flex-shrink-0">
             <span className="hidden sm:inline">zk-terminal</span>
             <span className="sm:hidden">zk</span>
             <span>{currentDir}</span>
-            <span>$</span>
+            <span className="text-blue-400">❯</span>
           </p>
-          <input
-            ref={inputRef}
-            type="text"
-            className="w-full bg-black text-white outline-none caret-white flex-1 min-w-0 ml-4 animate-pulse"
-            value={currentCommand}
-            onChange={(e) => setCurrentCommand(e.target.value)}
-            onKeyDown={handleKeyDown}
-            aria-label="Terminal command input"
-            autoComplete="off"
-          />
+          {searchMode ? (
+            <SearchInterface
+              searchQuery={searchQuery}
+              searchResults={searchResults}
+              searchIndex={searchIndex}
+            />
+          ) : (
+            <TerminalInput
+              ref={inputRef}
+              currentCommand={currentCommand}
+              onChange={handleInputChange}
+              onKeyDown={handleInputKeyDown}
+              onBlur={handleInputBlur}
+              showSuggestions={showSuggestions}
+              suggestions={suggestions}
+              inputElementRef={inputElementRef}
+            />
+          )}
         </div>
       </div>
+
+      {/* Text Editor Overlay */}
+      {editorMode?.isOpen && (
+        <TextEditor
+          filePath={editorMode.filePath}
+          editorType={editorMode.editorType}
+          onClose={handleEditorClose}
+          onSave={handleEditorSave}
+        />
+      )}
     </div>
   );
-};
+});
+
+Home.displayName = "Home";
 
 export default Home;

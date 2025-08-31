@@ -1,6 +1,7 @@
 import { CommandContext } from "../../types";
 import { makeDirectory, createFile, readFile, writeFile, deleteFile } from "../../filesystem";
 import { pathJoin } from "../../utils";
+import { getFileType, highlightContent } from "../../utils/syntax-highlighting";
 
 export const handleMkdir = (args: string[], context: CommandContext): string => {
   const errorMessage = makeDirectory(args[0], context.currentDir);
@@ -19,7 +20,15 @@ export const handleCat = (args: string[], context: CommandContext): string => {
   }
   const fullPath = filePath.startsWith("/") ? filePath : pathJoin(context.currentDir, filePath);
   const content = readFile(fullPath);
-  return content instanceof Error ? "error: " + content.message : content;
+  if (content instanceof Error) {
+    return "error: " + content.message;
+  }
+
+  // Apply syntax highlighting based on file type
+  const fileType = getFileType(filePath);
+  const highlightedContent = highlightContent(content, fileType);
+
+  return highlightedContent;
 };
 
 export const handleRm = (args: string[], context: CommandContext): string => {

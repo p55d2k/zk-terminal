@@ -19,31 +19,21 @@ A modern, web-based terminal simulator built with Next.js, TypeScript, and Tailw
 - **Persistent Storage**: File system state persists in browser's localStorage
 - **Command History**: Navigate through previous commands with ↑/↓ arrows
 - **Auto-completion**: Tab completion for commands and paths
+- **Built-in Text Editor**: `nano` and `vim` style editors with full-screen interface
+- **Focus Locking**: Cursor stays locked in terminal input for authentic experience
+- **Syntax Highlighting**: Automatic highlighting for 10+ file types in `cat`
+- **Command History Search**: Ctrl+R for reverse search through history
+- **File Compression**: gzip/gunzip and tar archive support
+- **Advanced File Operations**: chmod, ln, find, grep with full Unix compatibility
 
-### Available Commands
+### Security Features
 
-- `ls` - List directory contents
-- `cd <dir>` - Change directory
-- `pwd` - Print working directory
-- `cat <file>` - Display file contents
-- `echo <text>` - Output text
-- `touch <file>` - Create empty file
-- `mkdir <dir>` - Create directory
-- `rm <path> [-r]` - Remove file or directory
-- `mv <src> <dest>` - Move/rename file or directory
-- `cp <src> <dest>` - Copy file or directory
-- `clear` - Clear screen
-- `reset` - Reset filesystem to default state
-- `help` - Show available commands
-
-### Special Features
-
-- **Command Operators**:
-  - `;` - Command separator (execute all)
-  - `&&` - Conditional execution (execute if previous succeeds)
-  - `|` - Pipe operator (pass output as input)
-- **Redirection**: `echo "text" > file.txt`
-- **Recursive Operations**: `rm -r` for directories
+- **Content Security Policy (CSP)**: Strict CSP headers prevent XSS attacks
+- **Input Sanitization**: All command inputs are sanitized and validated
+- **Path Traversal Protection**: Enhanced path validation prevents directory traversal attacks
+- **Rate Limiting**: Command execution is rate-limited to prevent DoS attacks
+- **Content Validation**: File content is validated to prevent malicious uploads
+- **Dependency Security**: Regular security audits and dependency updates
 
 ## Getting Started
 
@@ -85,7 +75,15 @@ pnpm dev
 bun dev
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser
+4. Run tests (optional):
+
+```bash
+npm run test          # Run unit and integration tests
+npm run test:coverage # Run tests with coverage
+npm run test:e2e      # Run end-to-end tests
+```
+
+5. Open [http://localhost:3000](http://localhost:3000) in your browser
 
 ## Usage
 
@@ -108,35 +106,64 @@ mkdir test && cd test && touch file.txt
 ls | cat
 ```
 
+### Advanced Usage
+
+```bash
+# Text editing
+nano README.md    # Open file in nano editor
+vim script.js     # Open file in vim editor
+
+# File permissions and links
+chmod 755 script.sh
+ln -s target link
+
+# Search and find
+find "*.js"        # Find all JavaScript files
+grep "function" *.js  # Search for text in files
+
+# Compression
+gzip large-file.txt
+tar -c -f archive.tar *.txt
+tar -x -f archive.tar
+
+# Advanced directory listing
+ls -l              # Long format with permissions
+ls --page 2        # Paginated results
+```
+
 ### File System
 
-- All data is stored in your browser's localStorage
+- All data is stored in your browser's IndexedDB
 - Filesystem persists between sessions
 - Use `reset` to restore to default state
 - Supports nested directories and files
+- Full Unix-style permissions and ownership
+- Symbolic links and advanced file operations
 
 ## Project Structure
 
 ```
 zk-terminal/
 ├── app/                 # Next.js app directory
+│   ├── components/      # React components
+│   │   ├── CommandHistory.tsx
+│   │   ├── SearchInterface.tsx
+│   │   ├── TerminalHeader.tsx
+│   │   ├── TerminalInput.tsx
+│   │   ├── TextEditor.tsx    # Built-in text editor
+│   │   └── ...
 │   ├── layout.tsx      # Root layout
 │   ├── page.tsx        # Main terminal page
 │   └── globals.css     # Global styles
 ├── lib/                # Core logic (modular architecture)
 │   ├── commands/       # Command definitions and handlers
-│   │   ├── index.ts    # Command registry
-│   │   ├── ls.ts       # List directory command
-│   │   ├── cd.ts       # Change directory command
-│   │   ├── cat.ts      # Display file contents
-│   │   ├── cp.ts       # Copy files/directories
-│   │   ├── mv.ts       # Move/rename files
-│   │   ├── rm.ts       # Remove files/directories
-│   │   ├── mkdir.ts    # Create directories
-│   │   ├── touch.ts    # Create files
-│   │   ├── echo.ts     # Output text
-│   │   ├── pwd.ts      # Print working directory
-│   │   └── help.ts     # Show help
+│   │   ├── handlers/   # Command implementations
+│   │   │   ├── editor.ts     # Text editor commands
+│   │   │   ├── fileops.ts    # File operations
+│   │   │   ├── navigation.ts # Navigation commands
+│   │   │   ├── utility.ts    # Utility commands
+│   │   │   └── ...
+│   │   └── index.ts    # Command registry
 │   ├── filesystem/     # Filesystem operations
 │   │   ├── index.ts    # Filesystem utilities
 │   │   ├── navigation.ts # Directory navigation
@@ -152,12 +179,104 @@ zk-terminal/
 └── package.json        # Dependencies and scripts
 ```
 
-## Technologies Used
+## Testing
 
-- **Next.js 14** - React framework with App Router
-- **TypeScript** - Type-safe JavaScript
-- **Tailwind CSS** - Utility-first CSS framework
-- **localStorage** - Client-side data persistence
+This project includes comprehensive testing infrastructure to ensure quality and reliability.
+
+### Test Types
+
+- **Unit Tests**: Test individual functions and components in isolation
+- **Integration Tests**: Test command flows and interactions between components
+- **End-to-End Tests**: Test complete user workflows in the browser
+
+### Running Tests
+
+```bash
+# Run all tests
+npm run test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Run tests with coverage report
+npm run test:coverage
+
+# Run end-to-end tests
+npm run test:e2e
+
+# Run e2e tests with UI
+npm run test:e2e:ui
+```
+
+### Test Structure
+
+```
+__tests__/              # Unit and integration tests
+├── utils.test.ts       # Path utility functions
+├── commands.integration.test.ts  # Command flow testing
+└── components/         # Component tests
+    └── TerminalInput.test.tsx
+
+e2e/                    # End-to-end tests
+└── terminal.spec.ts    # Browser automation tests
+```
+
+### CI/CD
+
+The project includes GitHub Actions workflow for automated testing:
+
+- Runs on every push and pull request
+- Tests across multiple Node.js versions (18.x, 20.x)
+- Includes unit tests, integration tests, and e2e tests
+- Generates test coverage reports
+- Deploys to GitHub Pages on main branch
+
+### Test Coverage
+
+Current test coverage includes:
+
+- Utility functions (path operations, validation)
+- React components (TerminalInput, form interactions)
+- Command parsing and execution
+- File system operations
+- User interface interactions
+
+### Writing Tests
+
+#### Unit Tests
+
+```typescript
+import { pathJoin, normalizePath } from "../lib/utils";
+
+describe("Path Utilities", () => {
+  it("should join paths correctly", () => {
+    expect(pathJoin("/home", "user", "docs")).toBe("/home/user/docs");
+  });
+});
+```
+
+#### Component Tests
+
+```typescript
+import { render, screen } from "@testing-library/react";
+import TerminalInput from "./TerminalInput";
+
+it("renders input field", () => {
+  render(<TerminalInput {...props} />);
+  expect(screen.getByRole("textbox")).toBeInTheDocument();
+});
+```
+
+#### E2E Tests
+
+```typescript
+import { test, expect } from "@playwright/test";
+
+test("should execute basic commands", async ({ page }) => {
+  await page.goto("/");
+  // Test implementation
+});
+```
 
 ## Contributing
 

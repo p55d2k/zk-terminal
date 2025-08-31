@@ -4,7 +4,12 @@ import { pathJoin, normalizePath, getParentPath, resolvePath } from "../utils";
 
 export const getDirectoryFromPath = (fullPath: string): Directory | Error => {
   const data = loadData();
-  const normalizedPath = normalizePath(fullPath);
+  let normalizedPath: string;
+  try {
+    normalizedPath = normalizePath(fullPath);
+  } catch (error) {
+    return new Error(`Invalid path: ${fullPath}`);
+  }
 
   if (normalizedPath === "/") {
     return data;
@@ -30,7 +35,9 @@ export const getDirectoryFromPath = (fullPath: string): Directory | Error => {
   return currentDir;
 };
 
-export const getContentFromPath = (fullPath: string): FileSystemItem[] | Error => {
+export const getContentFromPath = (
+  fullPath: string
+): FileSystemItem[] | Error => {
   const directory = getDirectoryFromPath(fullPath);
 
   if (directory instanceof Error) {
@@ -40,18 +47,44 @@ export const getContentFromPath = (fullPath: string): FileSystemItem[] | Error =
   return directory.content;
 };
 
-export const listDirectory = (currentDir: string): string => {
+export const listDirectory = (
+  currentDir: string,
+  page: number = 1,
+  pageSize: number = 50
+): string => {
   const dirData = getContentFromPath(currentDir);
 
   if (dirData instanceof Error) {
     return "error: " + dirData.message;
   }
 
-  return dirData
+  if (dirData.length === 0) {
+    return "Directory is empty.";
+  }
+
+  // Implement lazy loading/pagination
+  const startIndex = (page - 1) * pageSize;
+  const endIndex = startIndex + pageSize;
+  const paginatedItems = dirData.slice(startIndex, endIndex);
+
+  let result = paginatedItems
     .map((content) =>
       content.type === "directory" ? content.name + "/" : content.name
     )
     .join(" ");
+
+  // Add pagination info if there are more items
+  if (dirData.length > endIndex) {
+    result += `\n... and ${
+      dirData.length - endIndex
+    } more items. Use 'ls --page ${page + 1}' to see next page.`;
+  }
+
+  if (page > 1) {
+    result += `\nPage ${page} of ${Math.ceil(dirData.length / pageSize)}`;
+  }
+
+  return result;
 };
 
 export const changeDirectory = (
@@ -87,6 +120,10 @@ export const changeDirectory = (
     return new Error(`not a directory: ${newDir}`);
   }
 
-  setCurrentDir(normalizePath(foundDir.fullPath));
+  try {
+    setCurrentDir(normalizePath(foundDir.fullPath));
+  } catch (error) {
+    return new Error("Invalid path");
+  }
   return "success";
 };

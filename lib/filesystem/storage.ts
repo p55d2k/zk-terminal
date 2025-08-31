@@ -1,53 +1,28 @@
 import { Directory } from "../types";
+import {
+  loadData as loadFromIndexedDB,
+  saveData as saveToIndexedDB,
+  resetData as resetFromIndexedDB,
+} from "./indexeddb-storage";
+import {
+  loadDataWithCache,
+  saveDataWithCache,
+  resetDataWithCache,
+  defaultData,
+  reviveDates,
+} from "./enhanced-storage";
 
-export const defaultData: Directory = {
-  name: "/",
-  type: "directory",
-  fullPath: "/",
-  content: [
-    {
-      name: "README.md",
-      type: "file",
-      fullPath: "/README.md",
-      content: "Welcome to zk-terminal v1.0",
-    },
-    {
-      name: "projects",
-      type: "directory",
-      fullPath: "/projects",
-      content: [],
-    },
-  ],
-};
+// Use enhanced storage with caching and compression
+export { defaultData };
 
 export const loadData = (): Directory => {
-  if (typeof window === "undefined") {
-    return defaultData;
-  }
-
-  const data = localStorage.getItem("data");
-  if (!data) {
-    localStorage.setItem("data", JSON.stringify(defaultData));
-    return defaultData;
-  }
-
-  try {
-    return JSON.parse(data);
-  } catch {
-    localStorage.setItem("data", JSON.stringify(defaultData));
-    return defaultData;
-  }
+  return loadDataWithCache();
 };
 
 export const saveData = (data: Directory): void => {
-  if (typeof window !== "undefined") {
-    localStorage.setItem("data", JSON.stringify(data));
-  }
+  saveDataWithCache(data);
 };
 
 export const resetData = (): Directory => {
-  if (typeof window !== "undefined") {
-    localStorage.removeItem("data");
-  }
-  return defaultData;
+  return resetDataWithCache();
 };

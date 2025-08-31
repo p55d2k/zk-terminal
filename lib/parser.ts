@@ -2,7 +2,9 @@ import { CommandContext } from "./types";
 import { commands } from "./commands";
 import * as handlers from "./commands/handlers";
 
-export const parseCommand = (command: string): { name: string; args: string[] } => {
+export const parseCommand = (
+  command: string
+): { name: string; args: string[] } => {
   const parts = command.trim().split(/\s+/);
   const name = parts[0] || "";
   const args = parts.slice(1);
@@ -20,8 +22,11 @@ export const executeCommand = (
   }
 
   // Map command names to handler functions
-  const handlerMap: Record<string, (args: string[], context: CommandContext) => string> = {
-    ls: handlers.handleLs,
+  const handlerMap: Record<
+    string,
+    (args: string[], context: CommandContext) => string
+  > = {
+    ls: args.includes("-l") ? handlers.handleLsLong : handlers.handleLs,
     cd: handlers.handleCd,
     pwd: handlers.handlePwd,
     mkdir: handlers.handleMkdir,
@@ -34,6 +39,15 @@ export const executeCommand = (
     clear: handlers.handleClear,
     reset: handlers.handleReset,
     help: handlers.handleHelp,
+    chmod: handlers.handleChmod,
+    ln: handlers.handleLn,
+    find: handlers.handleFind,
+    grep: handlers.handleGrep,
+    gzip: handlers.handleGzip,
+    gunzip: handlers.handleGunzip,
+    tar: handlers.handleTar,
+    nano: handlers.handleNano,
+    vim: handlers.handleVim,
   };
 
   const handler = handlerMap[name];
