@@ -18,37 +18,63 @@ export const colors = {
 };
 
 export const highlightJavaScript = (content: string): string => {
-  return (
-    content
-      // Keywords
-      .replace(
-        /\b(const|let|var|function|return|if|else|for|while|do|switch|case|default|break|continue|try|catch|finally|throw|new|this|class|extends|super|import|export|from|async|await|yield|typeof|instanceof|in|of)\b/g,
-        colors.blue + "$1" + colors.reset
+  // Split content into tokens to avoid overlapping replacements
+  const tokens = content.split(/(\s+|[{}();,])/);
+  let result = "";
+
+  for (const token of tokens) {
+    if (!token.trim()) {
+      result += token;
+      continue;
+    }
+
+    let highlighted = token;
+
+    // Keywords (only match whole words)
+    if (
+      /\b(const|let|var|function|return|if|else|for|while|do|switch|case|default|break|continue|try|catch|finally|throw|new|this|class|extends|super|import|export|from|async|await|yield|typeof|instanceof|in|of)\b/.test(
+        token
       )
-      // Strings
-      .replace(/(["'`])(.*?)\1/g, colors.green + "$1$2$1" + colors.reset)
-      // Comments
-      .replace(/(\/\/.*$)/gm, colors.cyan + "$1" + colors.reset)
-      .replace(/(\/\*[\s\S]*?\*\/)/g, colors.cyan + "$1" + colors.reset)
-      // Numbers
-      .replace(/\b\d+(\.\d+)?\b/g, colors.yellow + "$1" + colors.reset)
-      // Function calls
-      .replace(/(\w+)\s*\(/g, colors.brightBlue + "$1" + colors.reset + "(")
-      // Object properties
-      .replace(/(\w+):/g, colors.brightMagenta + "$1" + colors.reset + ":")
-  );
+    ) {
+      highlighted = colors.blue + token + colors.reset;
+    }
+    // Strings
+    else if (/^["'`].*["'`]$/.test(token)) {
+      highlighted = colors.green + token + colors.reset;
+    }
+    // Comments
+    else if (/^\/\/|^\/\*|\*\/$/.test(token)) {
+      highlighted = colors.cyan + token + colors.reset;
+    }
+    // Numbers
+    else if (/^\d+(\.\d+)?$/.test(token)) {
+      highlighted = colors.yellow + token + colors.reset;
+    }
+    // Function calls (word followed by opening parenthesis)
+    else if (/^\w+\($/.test(token)) {
+      const funcName = token.slice(0, -1);
+      highlighted = colors.brightBlue + funcName + colors.reset + "(";
+    }
+    // Object properties (word followed by colon)
+    else if (/^\w+:$/.test(token)) {
+      const propName = token.slice(0, -1);
+      highlighted = colors.brightMagenta + propName + colors.reset + ":";
+    }
+
+    result += highlighted;
+  }
+
+  return result;
 };
 
 export const highlightTypeScript = (content: string): string => {
-  return (
-    content
-      // TypeScript specific keywords
-      .replace(
-        /\b(interface|type|enum|namespace|abstract|implements|readonly|private|protected|public|static|as|is)\b/g,
-        colors.magenta + "$1" + colors.reset
-      )
-      // Apply JavaScript highlighting first
-      .replace(content, highlightJavaScript(content))
+  // First apply JavaScript highlighting
+  let highlighted = highlightJavaScript(content);
+
+  // Then apply TypeScript-specific highlighting
+  return highlighted.replace(
+    /\b(interface|type|enum|namespace|abstract|implements|readonly|private|protected|public|static|as|is)\b/g,
+    colors.magenta + "$1" + colors.reset
   );
 };
 
@@ -200,8 +226,7 @@ export const highlightContent = (content: string, fileType: string): string => {
     case "css":
       return highlightCSS(content);
     case "markdown":
-      // Don't apply syntax highlighting to markdown files for better readability
-      return content;
+      return highlightMarkdown(content);
     default:
       return content;
   }

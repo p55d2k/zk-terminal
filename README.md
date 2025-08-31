@@ -16,15 +16,21 @@ A modern, web-based terminal simulator built with Next.js, TypeScript, and Tailw
 - **Command Chaining**: Use `;` to execute multiple commands sequentially
 - **Conditional Execution**: Use `&&` to run commands only if previous succeeds
 - **Piping**: Use `|` to pipe output from one command to another
-- **Persistent Storage**: File system state persists in browser's localStorage
+- **Persistent Storage**: File system state persists in browser's IndexedDB
 - **Command History**: Navigate through previous commands with ↑/↓ arrows
-- **Auto-completion**: Tab completion for commands and paths
+- **Auto-completion**: Tab completion for commands and paths with fuzzy matching
 - **Built-in Text Editor**: `nano` and `vim` style editors with full-screen interface
 - **Focus Locking**: Cursor stays locked in terminal input for authentic experience
 - **Syntax Highlighting**: Automatic highlighting for 10+ file types in `cat`
 - **Command History Search**: Ctrl+R for reverse search through history
 - **File Compression**: gzip/gunzip and tar archive support
 - **Advanced File Operations**: chmod, ln, find, grep with full Unix compatibility
+- **Networking Commands**: curl, wget, api, ws for network operations
+- **Job Control**: bg, fg, jobs, kill, ps for process management
+- **Environment Variables**: export, env, unset for variable management
+- **Command Aliases**: alias, unalias for custom command shortcuts
+- **Shell Scripting**: source, bash, . for executing shell scripts
+- **Fuzzy Matching**: Intelligent tab completion with fuzzy search
 
 ### Security Features
 
@@ -131,6 +137,74 @@ ls -l              # Long format with permissions
 ls --page 2        # Paginated results
 ```
 
+### Networking Commands
+
+```bash
+# HTTP requests (server-side, bypasses CORS, auto-adds https://)
+curl https://api.github.com/users/octocat
+curl github.com  # Automatically becomes https://github.com
+wget https://example.com/file.txt
+wget example.com # Automatically becomes https://example.com
+
+# API interactions (server-side proxy, auto-normalizes URLs)
+api GET https://jsonplaceholder.typicode.com/posts/1
+api GET jsonplaceholder.typicode.com/posts/1  # Auto-adds https://
+api POST https://jsonplaceholder.typicode.com/posts '{"title":"foo","body":"bar","userId":1}'
+
+# WebSocket testing
+ws wss://echo.websocket.org
+```
+
+### Job Control & Process Management
+
+```bash
+# Background job management
+sleep 10 &        # Start background job
+jobs              # List all jobs
+bg %1             # Move job 1 to background
+fg %1             # Bring job 1 to foreground
+kill %1           # Terminate job 1
+ps                # Show process status
+```
+
+### Environment Variables & Aliases
+
+```bash
+# Environment variables
+export MY_VAR="hello world"
+echo $MY_VAR      # Outputs: hello world
+env               # Show all variables
+unset MY_VAR      # Remove variable
+
+# Command aliases
+alias ll='ls -l'  # Create alias
+ll                # Use alias (same as ls -l)
+alias             # Show all aliases
+unalias ll        # Remove alias
+```
+
+### Shell Scripting
+
+```bash
+# Create and execute scripts
+echo 'echo "Hello from script!"' > hello.sh
+source hello.sh   # Execute script
+bash hello.sh     # Same as source
+. hello.sh        # Same as source
+
+# Script with variables and commands
+cat > script.sh << 'EOF'
+#!/bin/bash
+echo "Current directory: $PWD"
+ls -la
+echo "Script completed"
+EOF
+
+source script.sh
+```
+
+**Note:** `wget` saves downloaded files to the current directory in the virtual filesystem, just like the real wget command. Use `ls` to see downloaded files and `cat` to view their contents.
+
 ### File System
 
 - All data is stored in your browser's IndexedDB
@@ -145,6 +219,11 @@ ls --page 2        # Paginated results
 ```
 zk-terminal/
 ├── app/                 # Next.js app directory
+│   ├── api/            # API routes
+│   │   └── networking/ # Networking API routes
+│   │       ├── api/    # General API requests
+│   │       ├── curl/   # curl command handler
+│   │       └── wget/   # wget command handler
 │   ├── components/      # React components
 │   │   ├── CommandHistory.tsx
 │   │   ├── SearchInterface.tsx
@@ -162,17 +241,25 @@ zk-terminal/
 │   │   │   ├── fileops.ts    # File operations
 │   │   │   ├── navigation.ts # Navigation commands
 │   │   │   ├── utility.ts    # Utility commands
+│   │   │   ├── networking.ts # Functional networking commands
+│   │   │   ├── advanced.ts   # Job control, env, aliases, scripting
 │   │   │   └── ...
 │   │   └── index.ts    # Command registry
 │   ├── filesystem/     # Filesystem operations
 │   │   ├── index.ts    # Filesystem utilities
 │   │   ├── navigation.ts # Directory navigation
 │   │   ├── operations.ts # File/directory operations
-│   │   └── storage.ts  # localStorage persistence
+│   │   └── storage.ts  # IndexedDB persistence
 │   ├── types/          # TypeScript type definitions
 │   │   └── index.ts    # Core interfaces
 │   ├── utils/          # Utility functions
-│   │   └── index.ts    # Path utilities and helpers
+│   │   ├── index.ts    # Path utilities and helpers
+│   │   ├── fuzzy-match.ts # Fuzzy matching for completion
+│   │   └── ...
+│   ├── job-manager.ts  # Job control system
+│   ├── env-manager.ts  # Environment variables
+│   ├── alias-manager.ts # Command aliases
+│   ├── script-parser.ts # Shell script execution
 │   ├── parser.ts       # Command parsing and chaining
 │   └── handler.ts      # Main command processing
 ├── public/             # Static assets

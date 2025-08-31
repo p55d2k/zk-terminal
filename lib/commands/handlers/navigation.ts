@@ -1,6 +1,7 @@
 import { CommandContext } from "../../types";
 import { listDirectory, changeDirectory } from "../../filesystem";
 import { pathJoin } from "../../utils";
+import { envManager } from "../../env-manager";
 
 export const handleLs = (args: string[], context: CommandContext): string => {
   // Parse arguments for pagination
@@ -71,7 +72,10 @@ export const handleCd = (args: string[], context: CommandContext): string => {
   const errorMessage = changeDirectory(
     args[0] || "",
     context.currentDir,
-    context.setCurrentDir
+    (newDir: string) => {
+      context.setCurrentDir(newDir);
+      envManager.updatePwd(newDir);
+    }
   );
   return errorMessage instanceof Error ? "error: " + errorMessage.message : "";
 };

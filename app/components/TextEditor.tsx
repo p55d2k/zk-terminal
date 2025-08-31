@@ -18,7 +18,6 @@ const TextEditor = ({
 }: TextEditorProps) => {
   const [content, setContent] = useState("");
   const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [vimMode, setVimMode] = useState<"insert" | "command">("insert");
   const [commandBuffer, setCommandBuffer] = useState("");
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -29,19 +28,23 @@ const TextEditor = ({
       try {
         const fileContent = readFile(filePath);
         if (fileContent instanceof Error) {
-          setError(fileContent.message);
+          // Instead of showing popup, close editor immediately and let command handler show error
+          onClose();
+          return;
         } else {
           setContent(fileContent);
         }
       } catch (err) {
-        setError("Failed to load file");
+        // Instead of showing popup, close editor immediately
+        onClose();
+        return;
       } finally {
         setIsLoading(false);
       }
     };
 
     loadFile();
-  }, [filePath]);
+  }, [filePath, onClose]);
 
   useEffect(() => {
     // Focus textarea when component mounts
@@ -54,13 +57,14 @@ const TextEditor = ({
     try {
       const result = writeFile(filePath, content);
       if (result instanceof Error) {
-        setError(result.message);
+        // For save errors, we could show a brief message, but for now just close
+        onClose();
       } else {
         onSave(content);
         onClose();
       }
     } catch (err) {
-      setError("Failed to save file");
+      onClose();
     }
   };
 
@@ -123,22 +127,6 @@ const TextEditor = ({
     return (
       <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
         <div className="text-white">Loading {filePath}...</div>
-      </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-50">
-        <div className="text-red-500 text-center">
-          <div>Error: {error}</div>
-          <button
-            onClick={onClose}
-            className="mt-4 px-4 py-2 bg-gray-700 text-white rounded hover:bg-gray-600"
-          >
-            Close
-          </button>
-        </div>
       </div>
     );
   }

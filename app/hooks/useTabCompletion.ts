@@ -1,5 +1,6 @@
 import { useState, useCallback } from "react";
 import { commands } from "@/lib/commands/index";
+import { fuzzyMatch, getFuzzyCompletions } from "@/lib/utils/fuzzy-match";
 
 export const useTabCompletion = (currentDir: string) => {
   const [tabPressCount, setTabPressCount] = useState<number>(0);
@@ -10,10 +11,10 @@ export const useTabCompletion = (currentDir: string) => {
   const getCompletions = useCallback((input: string): string[] => {
     const parts = input.split(" ");
     if (parts.length === 1) {
-      // Complete command
-      return commands.filter((cmd) => cmd.startsWith(input));
+      // Complete command with fuzzy matching
+      return getFuzzyCompletions(input, commands);
     } else {
-      // Complete file/path
+      // Complete file/path with fuzzy matching
       const lastPart = parts[parts.length - 1];
       const pathParts = lastPart.split("/");
       const dirPath = pathParts.slice(0, -1).join("/") || currentDir;
@@ -32,15 +33,15 @@ export const useTabCompletion = (currentDir: string) => {
         const content = getContentFromPath(fullDirPath);
         if (content instanceof Error) return [];
 
-        return content
-          .map((item: any) => {
-            const baseName = item.name + (item.type === "directory" ? "/" : "");
-            if (pathParts.length > 1) {
-              return lastPart.replace(/[^/]*$/, baseName);
-            }
-            return baseName;
-          })
-          .filter((name: string) => name.startsWith(lastPart));
+        const fileNames = content.map((item: any) => {
+          const baseName = item.name + (item.type === "directory" ? "/" : "");
+          if (pathParts.length > 1) {
+            return lastPart.replace(/[^/]*$/, baseName);
+          }
+          return baseName;
+        });
+
+        return getFuzzyCompletions(filePrefix, fileNames);
       } catch {
         return [];
       }

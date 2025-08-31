@@ -1,10 +1,5 @@
 import { Directory } from "../types";
 import {
-  loadData as loadFromIndexedDB,
-  saveData as saveToIndexedDB,
-  resetData as resetFromIndexedDB,
-} from "./indexeddb-storage";
-import {
   loadDataWithCache,
   saveDataWithCache,
   resetDataWithCache,

@@ -25,12 +25,12 @@ const isRateLimited = (bypassRateLimit = false): boolean => {
   return false;
 };
 
-export const handleLastCommand = (
+export const handleLastCommand = async (
   command: string,
   currentDir: string,
   setCurrentDir: (dir: string) => void,
   bypassRateLimit = false
-): string => {
+): Promise<string> => {
   if (isRateLimited(bypassRateLimit)) {
     return "error: command rate limit exceeded. Please wait before executing another command.";
   }
@@ -67,7 +67,7 @@ export const handleLastCommand = (
             },
             input: undefined,
           };
-          const result = executeCommand(subCmd, context);
+          const result = await executeCommand(subCmd, context);
           if (output && result) output += "\n";
           output += result;
           chainSuccess = !result.startsWith("error:");
@@ -89,7 +89,7 @@ export const handleLastCommand = (
           },
           input,
         };
-        const result = executeCommand(subCmd, context);
+        const result = await executeCommand(subCmd, context);
         if (output && result) output += "\n";
         output += result;
         input = result;
@@ -104,7 +104,7 @@ export const handleLastCommand = (
         },
         input: undefined,
       };
-      const result = executeCommand(chain, context);
+      const result = await executeCommand(chain, context);
       if (output && result) output += "\n";
       output += result;
     }

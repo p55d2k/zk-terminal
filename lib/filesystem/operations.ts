@@ -231,6 +231,58 @@ export const writeFile = (
   return "success";
 };
 
+export const writeFileUnsafe = (
+  filePath: string,
+  content: string
+): Error | "success" => {
+  // Skip validation for trusted downloads (like wget)
+  const data = loadData();
+  const dirs = filePath.split("/").filter((dir) => dir !== "");
+  let current = data;
+
+  for (let i = 0; i < dirs.length - 1; i++) {
+    const dir = dirs[i];
+    const found = current.content.find(
+      (c) => c.name === dir && c.type === "directory"
+    );
+    if (!found) return new Error(`path not found: ${filePath}`);
+    current = found as Directory;
+  }
+
+  const fileName = dirs[dirs.length - 1];
+  const file = current.content.find(
+    (c) => c.name === fileName && c.type === "file"
+  );
+
+  if (file) {
+    (file as File).content = content;
+    (file as File).size = content.length;
+    (file as File).modified = new Date();
+  } else {
+    let fullPath: string;
+    try {
+      fullPath = normalizePath(filePath);
+    } catch (error) {
+      return new Error("Invalid file path");
+    }
+    current.content.push({
+      name: fileName,
+      type: "file",
+      fullPath,
+      content: content,
+      permissions: "-rw-r--r--",
+      owner: "user",
+      group: "users",
+      size: content.length,
+      modified: new Date(),
+      created: new Date(),
+    });
+  }
+
+  saveData(data);
+  return "success";
+};
+
 export const deleteFile = (
   path: string,
   recursive: boolean = false

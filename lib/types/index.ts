@@ -50,3 +50,28 @@ export interface CommandContext {
   setCurrentDir: (dir: string) => void;
   input?: string;
 }
+
+export interface Job {
+  id: number;
+  command: string;
+  status: "running" | "stopped" | "completed" | "terminated";
+  pid: number;
+  startTime: Date;
+  background: boolean;
+}
+
+export interface EnvironmentVariable {
+  name: string;
+  value: string;
+}
+
+export interface Alias {
+  name: string;
+  command: string;
+}
+
+export interface ScriptContext {
+  variables: Map<string, string>;
+  functions: Map<string, string>;
+  currentLine: number;
+}

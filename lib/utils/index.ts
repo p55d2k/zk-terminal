@@ -75,12 +75,24 @@ export const resolvePath = (currentDir: string, targetPath: string): string => {
   return normalizePath(fullPath);
 };
 
-// Additional security function to validate paths
-export const validatePath = (path: string): boolean => {
-  try {
-    normalizePath(path);
-    return true;
-  } catch {
-    return false;
+// Helper function to expand tilde (~) in paths
+export const expandTilde = (path: string): string => {
+  if (path.startsWith("~/")) {
+    return path.replace(/^~\//, "/home/user/");
   }
+  if (path === "~") {
+    return "/home/user";
+  }
+  return path;
+};
+
+// Helper function to convert internal paths to display paths
+export const toDisplayPath = (path: string): string => {
+  if (path.startsWith("/home/user")) {
+    return path.replace(/^\/home\/user/, "~");
+  }
+  if (path === "/home/user") {
+    return "~";
+  }
+  return path;
 };

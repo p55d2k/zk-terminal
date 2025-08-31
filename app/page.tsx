@@ -18,7 +18,7 @@ interface CommandHistory {
 }
 
 const Home = memo(() => {
-  const [currentDir, setCurrentDir] = useState<string>("/");
+  const [currentDir, setCurrentDir] = useState<string>("/home/user");
   const [cleared, setCleared] = useState<boolean>(false);
   const [currentCommand, setCurrentCommand] = useState<string>("");
 
@@ -77,6 +77,17 @@ const Home = memo(() => {
     return "";
   }, []);
 
+  // Convert path to tilde notation for display
+  const displayPath = useMemo(() => {
+    if (currentDir === "/home/user") {
+      return "~";
+    }
+    if (currentDir.startsWith("/home/user/")) {
+      return "~" + currentDir.substring("/home/user".length);
+    }
+    return currentDir;
+  }, [currentDir]);
+
   const clearScreen = useCallback(() => {
     setCleared(true);
     clearHistory();
@@ -98,9 +109,13 @@ const Home = memo(() => {
     [editorMode, updateCommandOutput]
   );
 
-  const handleCommandEntered = useCallback(() => {
+  const handleCommandEntered = useCallback(async () => {
     if (!currentCommand.trim()) return;
-    const output = handleLastCommand(currentCommand, currentDir, setCurrentDir);
+    const output = await handleLastCommand(
+      currentCommand,
+      currentDir,
+      setCurrentDir
+    );
 
     // Check if output indicates editor should open
     if (output.startsWith("__OPEN_EDITOR__:")) {
@@ -168,6 +183,32 @@ const Home = memo(() => {
       historyRef.current.scrollTop = historyRef.current.scrollHeight;
     }
   }, [history]);
+
+  // Source .bashrc on startup
+  useEffect(() => {
+    const sourceBashrc = async () => {
+      const bashrcPath = "/home/user/.bashrc";
+      try {
+        const output = await handleLastCommand(
+          `source ${bashrcPath}`,
+          currentDir,
+          setCurrentDir,
+          true
+        );
+        // Don't add the output to history, just execute it silently
+        if (output && !output.startsWith("error:")) {
+          // Successfully sourced .bashrc
+        }
+      } catch (error) {
+        // Silently fail if .bashrc doesn't exist or has errors
+      }
+    };
+
+    // Only source .bashrc if we're at the home directory (initial load)
+    if (currentDir === "/home/user") {
+      sourceBashrc();
+    }
+  }, [currentDir]); // Include currentDir in dependencies
 
   // Focus locking effect - keep focus on terminal input when not in editor mode
   useEffect(() => {
@@ -298,7 +339,7 @@ const Home = memo(() => {
           <p className="flex flex-row space-x-2 text-green-400 flex-shrink-0">
             <span className="hidden sm:inline">zk-terminal</span>
             <span className="sm:hidden">zk</span>
-            <span>{currentDir}</span>
+            <span>{displayPath}</span>
             <span className="text-blue-400">❯</span>
           </p>
           {searchMode ? (
